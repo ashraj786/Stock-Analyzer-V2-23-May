@@ -10,18 +10,44 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def fetch_nse_base_list() -> pd.DataFrame:
-    url = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+import pandas as pd
+import requests
+import io
+import streamlit as st
+
+import pandas as pd
+import requests
+import io
+import streamlit as st
+
+def fetch_nse_base_list():
+    url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept-Language": "en-US,en;q=0.9"
+    }
+    
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        df = pd.read_csv(io.StringIO(response.text))
-        df.columns = df.columns.str.strip()
-        return df[df['SERIES'] == 'EQ'].copy()
+        session = requests.Session()
+        session.get("https://www.nseindia.com", headers=headers, timeout=5)
+        response = session.get(url, headers=headers, timeout=5)
+        
+        if response.status_code == 200 and "SYMBOL" in response.text:
+            df = pd.read_csv(io.StringIO(response.text))
+        else:
+            raise ValueError("NSE blocked the live request.")
+            
     except Exception as e:
-        print(f"Error fetching base list: {e}")
-        return pd.DataFrame()
+        st.warning("Live NSE fetch blocked. Using local EQUITY_L.csv fallback...")
+        df = pd.read_csv("EQUITY_L.csv")
+    
+    df.columns = df.columns.str.strip()
+    
+    if 'SERIES' in df.columns:
+        df = df[df['SERIES'] == 'EQ']
+        
+    # FIXED: Return the DataFrame so the app can call .head() on it
+    return df
 
 def fetch_exhaustive_fundamentals(symbol: str, max_retries: int = 3) -> dict:
     ticker_str = f"{symbol}.NS"
